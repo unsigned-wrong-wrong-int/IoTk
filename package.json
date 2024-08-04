@@ -7,8 +7,8 @@
   "readme":       "README.md",
   "protos":       ["IoTk"],
   "dependencies": {
-    "libs":     [],
-    "headers":  [],
+    "libs":     ["tcl8.6", "tk8.6"],
+    "headers":  ["tcl8.6/tcl.h", "tcl8.6/tk.h"],
     "protos":   [],
     "packages": []
   }

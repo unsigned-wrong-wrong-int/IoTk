@@ -1,0 +1,25 @@
+#ifndef IOIOTK_DEFINED
+#define IOIOTK_DEFINED 1
+
+#include <tcl8.6/tcl.h>
+#include <tcl8.6/tk.h>
+
+#include "IoObject.h"
+
+#define ISIOTK(self) IoObject_hasCloneFunc_(self, (IoTagCloneFunc *)IoIoTk_rawClone)
+
+typedef IoObject IoIoTk;
+
+typedef struct {
+   Tcl_Interp *tcl;
+   bool isProto;
+} IoIoTkData;
+
+IoIoTk *IoIoTk_proto(void *state);
+IoIoTk *IoIoTk_rawClone(IoIoTk *proto);
+void IoIoTk_free(IoIoTk *self);
+void IoIoTk_mark(IoIoTk *self);
+
+IoObject *IoIoTk_test(IoIoTk *self, IoObject *locals, IoMessage *m);
+
+#endif
