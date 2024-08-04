@@ -1,0 +1,15 @@
+{
+  "name":         "IoTk",
+  "version":      "0.1.0",
+  "description":  "IoTk is a wrapper around Tcl/Tk GUI toolkit.",
+  "author":       "",
+  "website":      "",
+  "readme":       "README.md",
+  "protos":       ["IoTk"],
+  "dependencies": {
+    "libs":     [],
+    "headers":  [],
+    "protos":   [],
+    "packages": []
+  }
+}
