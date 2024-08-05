@@ -36,6 +36,9 @@ IoIoTk *IoIoTk_proto(void *state) {
       {"eval", IoIoTk_eval},
       {"define", IoIoTk_define},
       {"undef", IoIoTk_undef},
+      {"varAt", IoIoTk_varAt},
+      {"varAtPut", IoIoTk_varAtPut},
+      {"varRemoveAt", IoIoTk_varRemoveAt},
       {NULL, NULL}
    };
    IoObject_addMethodTable_(self, methodTable);
@@ -77,7 +80,11 @@ IoObject *IoIoTk_eval(IoIoTk *self, IoObject *locals, IoMessage *m) {
    char *str = CSTRING(cmd);
    size_t len = IoSeq_rawSizeInBytes(cmd);
    int r = Tcl_EvalEx(DATA(self)->tcl, str, len, 0);
-   return IONUMBER(r);
+   if (r != TCL_OK) {
+      return IONIL(self);
+   }
+   const char *result = Tcl_GetStringResult(DATA(self)->tcl);
+   return IoSeq_newWithCString_(IOSTATE, result);
 }
 
 typedef struct {
@@ -89,9 +96,18 @@ int TkCmdProc(ClientData data, Tcl_Interp *interp, int argc, const char *argv[])
    IoObject *self = ((TkCmdData *)data)->self;
    IoMessage *m = IoMessage_newWithName_(IOSTATE, ((TkCmdData *)data)->slotName);
    for (int i = 1; i < argc; ++i) {
-      IoMessage_addCachedArg_(m, IOSYMBOL(argv[i]));
+      IoMessage_addCachedArg_(m, IoSeq_newWithCString_(IOSTATE, argv[i]));
    }
-   IoMessage_locals_performOn_(m, self, self);
+   IoObject *result = IoMessage_locals_performOn_(m, self, self);
+   char *str = NULL;
+   if (result != IONIL(self)) {
+      IoObject *ioStr = IoMessage_locals_performOn_(IOSTATE->asStringMessage, result, result);
+      if (ISSEQ(ioStr)) {
+         str = CSTRING(ioStr);
+      }
+   }
+   Tcl_FreeResult(interp);
+   Tcl_SetResult(interp, str, TCL_VOLATILE);
    return TCL_OK;
 }
 
@@ -112,4 +128,48 @@ IoObject *IoIoTk_undef(IoObject *self, IoObject *locals, IoMessage *m) {
    char *name = IoMessage_locals_cStringArgAt_(m, locals, 0);
    Tcl_DeleteCommand(DATA(self)->tcl, name);
    return IONIL(self);
+}
+
+IoObject *IoIoTk_varAt(IoObject *self, IoObject *locals, IoMessage *m) {
+   char *name1 = IoMessage_locals_cStringArgAt_(m, locals, 0);
+   char *name2 = NULL;
+   if (IoMessage_argCount(m) >= 2) {
+      name2 = IoMessage_locals_cStringArgAt_(m, locals, 1);
+   }
+   const char *value = Tcl_GetVar2(DATA(self)->tcl, name1, name2, 0);
+   if (value == NULL) {
+      return IONIL(self);
+   }
+   return IoSeq_newWithCString_(IOSTATE, value);
+}
+
+IoObject *IoIoTk_varAtPut(IoObject *self, IoObject *locals, IoMessage *m) {
+   char *name1 = IoMessage_locals_cStringArgAt_(m, locals, 0);
+   char *name2 = NULL;
+   IoObject *value;
+   if (IoMessage_argCount(m) >= 3) {
+      name2 = IoMessage_locals_cStringArgAt_(m, locals, 1);
+      value = IoMessage_locals_valueArgAt_(m, locals, 2);
+   } else {
+      value = IoMessage_locals_valueArgAt_(m, locals, 1);
+   }
+   const char *str = "";
+   if (value != IONIL(self)) {
+      IoObject *ioStr = IoMessage_locals_performOn_(IOSTATE->asStringMessage, value, value);
+      if (ISSEQ(ioStr)) {
+         str = CSTRING(ioStr);
+      }
+   }
+   const char *result = Tcl_SetVar2(DATA(self)->tcl, name1, name2, str, 0);
+   return IOBOOL(self, result != NULL);
+}
+
+IoObject *IoIoTk_varRemoveAt(IoObject *self, IoObject *locals, IoMessage *m) {
+   char *name1 = IoMessage_locals_cStringArgAt_(m, locals, 0);
+   char *name2 = NULL;
+   if (IoMessage_argCount(m) >= 2) {
+      name2 = IoMessage_locals_cStringArgAt_(m, locals, 1);
+   }
+   int r = Tcl_UnsetVar2(DATA(self)->tcl, name1, name2, 0);
+   return IOBOOL(self, r == TCL_OK);
 }
