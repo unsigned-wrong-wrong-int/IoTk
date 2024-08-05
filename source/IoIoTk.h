@@ -23,5 +23,7 @@ void IoIoTk_mark(IoIoTk *self);
 IoObject *IoIoTk_init(IoIoTk *self, IoObject *locals, IoMessage *m);
 IoObject *IoIoTk_mainloop(IoIoTk *self, IoObject *locals, IoMessage *m);
 IoObject *IoIoTk_eval(IoIoTk *self, IoObject *locals, IoMessage *m);
+IoObject *IoIoTk_define(IoObject *self, IoObject *locals, IoMessage *m);
+IoObject *IoIoTk_undef(IoObject *self, IoObject *locals, IoMessage *m);
 
 #endif

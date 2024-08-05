@@ -34,6 +34,8 @@ IoIoTk *IoIoTk_proto(void *state) {
       {"init", IoIoTk_init},
       {"mainloop", IoIoTk_mainloop},
       {"eval", IoIoTk_eval},
+      {"define", IoIoTk_define},
+      {"undef", IoIoTk_undef},
       {NULL, NULL}
    };
    IoObject_addMethodTable_(self, methodTable);
@@ -76,4 +78,38 @@ IoObject *IoIoTk_eval(IoIoTk *self, IoObject *locals, IoMessage *m) {
    size_t len = IoSeq_rawSizeInBytes(cmd);
    int r = Tcl_EvalEx(DATA(self)->tcl, str, len, 0);
    return IONUMBER(r);
+}
+
+typedef struct {
+   IoObject *self;
+   IoSymbol *slotName;
+} TkCmdData;
+
+int TkCmdProc(ClientData data, Tcl_Interp *interp, int argc, const char *argv[]) {
+   IoObject *self = ((TkCmdData *)data)->self;
+   IoMessage *m = IoMessage_newWithName_(IOSTATE, ((TkCmdData *)data)->slotName);
+   for (int i = 1; i < argc; ++i) {
+      IoMessage_addCachedArg_(m, IOSYMBOL(argv[i]));
+   }
+   IoMessage_locals_performOn_(m, self, self);
+   return TCL_OK;
+}
+
+void TkCmdDeleteProc(ClientData data) {
+   free(data);
+}
+
+IoObject *IoIoTk_define(IoObject *self, IoObject *locals, IoMessage *m) {
+   char *name = IoMessage_locals_cStringArgAt_(m, locals, 0);
+   TkCmdData *data = (TkCmdData *)calloc(1, sizeof(TkCmdData));
+   data->self = IoMessage_locals_valueArgAt_(m, locals, 1);
+   data->slotName = IoMessage_locals_symbolArgAt_(m, locals, 2);
+   Tcl_CreateCommand(DATA(self)->tcl, name, TkCmdProc, data, TkCmdDeleteProc);
+   return IONIL(self);
+}
+
+IoObject *IoIoTk_undef(IoObject *self, IoObject *locals, IoMessage *m) {
+   char *name = IoMessage_locals_cStringArgAt_(m, locals, 0);
+   Tcl_DeleteCommand(DATA(self)->tcl, name);
+   return IONIL(self);
 }
