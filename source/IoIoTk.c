@@ -31,10 +31,10 @@ IoIoTk *IoIoTk_proto(void *state) {
 
    Tcl_FindExecutable(protoId);
    IoObject_setDataPointer_(self, calloc(1, sizeof(IoIoTkData)));
-   DATA(self)->tcl = Tcl_CreateInterp();
+   DATA(self)->interp = Tcl_CreateInterp();
    DATA(self)->isProto = true;
    DATA(self)->cmdList = List_new();
-   Tcl_Init(DATA(self)->tcl);
+   Tcl_Init(DATA(self)->interp);
    IoState_registerProtoWithId_((IoState *)state, self, protoId);
 
    IoMethodTable methodTable[] = {
@@ -56,15 +56,15 @@ IoIoTk *IoIoTk_proto(void *state) {
 IoIoTk *IoIoTk_rawClone(IoIoTk *proto) {
    IoIoTk *self = IoObject_rawClonePrimitive(proto);
    IoObject_setDataPointer_(self, calloc(1, sizeof(IoIoTkData)));
-   DATA(self)->tcl = DATA(proto)->tcl;
+   DATA(self)->interp = DATA(proto)->interp;
    DATA(self)->isProto = false;
    DATA(self)->cmdList = DATA(proto)->cmdList;
    return self;
 }
 
 void IoIoTk_free(IoIoTk *self) {
-   if (DATA(self)->isProto) {
-      Tcl_DeleteInterp(DATA(self)->tcl);
+   if (DATA(self)->isProto && !Tcl_InterpDeleted(DATA(self)->interp)) {
+      Tcl_DeleteInterp(DATA(self)->interp);
    }
    free(IoObject_dataPointer(self));
 }
@@ -81,7 +81,7 @@ void IoIoTk_mark(IoIoTk *self) {
 }
 
 IoObject *IoIoTk_init(IoIoTk *self, IoObject *locals, IoMessage *m) {
-   int r = Tk_Init(DATA(self)->tcl);
+   int r = Tk_Init(DATA(self)->interp);
    return IOBOOL(self, r == 0);
 }
 
@@ -94,11 +94,11 @@ IoObject *IoIoTk_eval(IoIoTk *self, IoObject *locals, IoMessage *m) {
    IoSymbol *cmd = IoMessage_locals_symbolArgAt_(m, locals, 0);
    char *str = CSTRING(cmd);
    size_t len = IoSeq_rawSizeInBytes(cmd);
-   int r = Tcl_EvalEx(DATA(self)->tcl, str, len, 0);
+   int r = Tcl_EvalEx(DATA(self)->interp, str, len, 0);
    if (r != TCL_OK) {
       return IONIL(self);
    }
-   const char *result = Tcl_GetStringResult(DATA(self)->tcl);
+   const char *result = Tcl_GetStringResult(DATA(self)->interp);
    return IoSeq_newWithCString_(IOSTATE, result);
 }
 
@@ -135,13 +135,13 @@ IoObject *IoIoTk_define(IoObject *self, IoObject *locals, IoMessage *m) {
    data->slotName = IoMessage_locals_symbolArgAt_(m, locals, 2);
    data->cmdList = DATA(self)->cmdList;
    List_append_(DATA(self)->cmdList, data);
-   Tcl_CreateCommand(DATA(self)->tcl, name, TkCmdProc, data, TkCmdDeleteProc);
+   Tcl_CreateCommand(DATA(self)->interp, name, TkCmdProc, data, TkCmdDeleteProc);
    return IONIL(self);
 }
 
 IoObject *IoIoTk_undef(IoObject *self, IoObject *locals, IoMessage *m) {
    char *name = IoMessage_locals_cStringArgAt_(m, locals, 0);
-   Tcl_DeleteCommand(DATA(self)->tcl, name);
+   Tcl_DeleteCommand(DATA(self)->interp, name);
    return IONIL(self);
 }
 
@@ -151,7 +151,7 @@ IoObject *IoIoTk_varAt(IoObject *self, IoObject *locals, IoMessage *m) {
    if (IoMessage_argCount(m) >= 2) {
       name2 = IoMessage_locals_cStringArgAt_(m, locals, 1);
    }
-   const char *value = Tcl_GetVar2(DATA(self)->tcl, name1, name2, 0);
+   const char *value = Tcl_GetVar2(DATA(self)->interp, name1, name2, 0);
    if (value == NULL) {
       return IONIL(self);
    }
@@ -176,7 +176,7 @@ IoObject *IoIoTk_varAtPut(IoObject *self, IoObject *locals, IoMessage *m) {
          str = CSTRING(ioStr);
       }
    }
-   const char *result = Tcl_SetVar2(DATA(self)->tcl, name1, name2, str, 0);
+   const char *result = Tcl_SetVar2(DATA(self)->interp, name1, name2, str, 0);
    return IOBOOL(self, result != NULL);
 }
 
@@ -186,6 +186,6 @@ IoObject *IoIoTk_varRemoveAt(IoObject *self, IoObject *locals, IoMessage *m) {
    if (IoMessage_argCount(m) >= 2) {
       name2 = IoMessage_locals_cStringArgAt_(m, locals, 1);
    }
-   int r = Tcl_UnsetVar2(DATA(self)->tcl, name1, name2, 0);
+   int r = Tcl_UnsetVar2(DATA(self)->interp, name1, name2, 0);
    return IOBOOL(self, r == TCL_OK);
 }
