@@ -13,6 +13,7 @@ typedef IoObject IoIoTk;
 typedef struct {
    Tcl_Interp *tcl;
    bool isProto;
+   List *cmdList;
 } IoIoTkData;
 
 IoIoTk *IoIoTk_proto(void *state);

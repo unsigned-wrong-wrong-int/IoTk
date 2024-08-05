@@ -8,6 +8,12 @@
 
 static const char *protoId = "IoTk";
 
+typedef struct {
+   IoObject *self;
+   IoSymbol *slotName;
+   List *cmdList;
+} TkCmdData;
+
 IoTag *IoIoTk_newTag(void *state) {
    IoTag *tag = IoTag_newWithName_(protoId);
    IoTag_state_(tag, state);
@@ -27,6 +33,7 @@ IoIoTk *IoIoTk_proto(void *state) {
    IoObject_setDataPointer_(self, calloc(1, sizeof(IoIoTkData)));
    DATA(self)->tcl = Tcl_CreateInterp();
    DATA(self)->isProto = true;
+   DATA(self)->cmdList = List_new();
    Tcl_Init(DATA(self)->tcl);
    IoState_registerProtoWithId_((IoState *)state, self, protoId);
 
@@ -51,6 +58,7 @@ IoIoTk *IoIoTk_rawClone(IoIoTk *proto) {
    IoObject_setDataPointer_(self, calloc(1, sizeof(IoIoTkData)));
    DATA(self)->tcl = DATA(proto)->tcl;
    DATA(self)->isProto = false;
+   DATA(self)->cmdList = DATA(proto)->cmdList;
    return self;
 }
 
@@ -62,7 +70,14 @@ void IoIoTk_free(IoIoTk *self) {
 }
 
 void IoIoTk_mark(IoIoTk *self) {
-
+   if (!DATA(self)->isProto) return;
+   List *cmdList = DATA(self)->cmdList;
+   int len = List_size(cmdList);
+   for (int i = 0; i < len; ++i) {
+      TkCmdData *cmd = (TkCmdData *)List_rawAt_(cmdList, i);
+      IoObject_shouldMark(cmd->self);
+      IoObject_shouldMark(cmd->slotName);
+   }
 }
 
 IoObject *IoIoTk_init(IoIoTk *self, IoObject *locals, IoMessage *m) {
@@ -87,11 +102,6 @@ IoObject *IoIoTk_eval(IoIoTk *self, IoObject *locals, IoMessage *m) {
    return IoSeq_newWithCString_(IOSTATE, result);
 }
 
-typedef struct {
-   IoObject *self;
-   IoSymbol *slotName;
-} TkCmdData;
-
 int TkCmdProc(ClientData data, Tcl_Interp *interp, int argc, const char *argv[]) {
    IoObject *self = ((TkCmdData *)data)->self;
    IoMessage *m = IoMessage_newWithName_(IOSTATE, ((TkCmdData *)data)->slotName);
@@ -100,8 +110,9 @@ int TkCmdProc(ClientData data, Tcl_Interp *interp, int argc, const char *argv[])
    }
    IoObject *result = IoMessage_locals_performOn_(m, self, self);
    char *str = NULL;
+   IoObject *ioStr = NULL;
    if (result != IONIL(self)) {
-      IoObject *ioStr = IoMessage_locals_performOn_(IOSTATE->asStringMessage, result, result);
+      ioStr = IoMessage_locals_performOn_(IOSTATE->asStringMessage, result, result);
       if (ISSEQ(ioStr)) {
          str = CSTRING(ioStr);
       }
@@ -112,6 +123,8 @@ int TkCmdProc(ClientData data, Tcl_Interp *interp, int argc, const char *argv[])
 }
 
 void TkCmdDeleteProc(ClientData data) {
+   TkCmdData *cmdData = (TkCmdData *)data;
+   List_remove_(cmdData->cmdList, cmdData);
    free(data);
 }
 
@@ -120,6 +133,8 @@ IoObject *IoIoTk_define(IoObject *self, IoObject *locals, IoMessage *m) {
    TkCmdData *data = (TkCmdData *)calloc(1, sizeof(TkCmdData));
    data->self = IoMessage_locals_valueArgAt_(m, locals, 1);
    data->slotName = IoMessage_locals_symbolArgAt_(m, locals, 2);
+   data->cmdList = DATA(self)->cmdList;
+   List_append_(DATA(self)->cmdList, data);
    Tcl_CreateCommand(DATA(self)->tcl, name, TkCmdProc, data, TkCmdDeleteProc);
    return IONIL(self);
 }
@@ -154,8 +169,9 @@ IoObject *IoIoTk_varAtPut(IoObject *self, IoObject *locals, IoMessage *m) {
       value = IoMessage_locals_valueArgAt_(m, locals, 1);
    }
    const char *str = "";
+   IoObject *ioStr = NULL;
    if (value != IONIL(self)) {
-      IoObject *ioStr = IoMessage_locals_performOn_(IOSTATE->asStringMessage, value, value);
+      ioStr = IoMessage_locals_performOn_(IOSTATE->asStringMessage, value, value);
       if (ISSEQ(ioStr)) {
          str = CSTRING(ioStr);
       }
