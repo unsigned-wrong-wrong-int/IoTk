@@ -21,7 +21,6 @@ IoIoTk *IoIoTk_rawClone(IoIoTk *proto);
 void IoIoTk_free(IoIoTk *self);
 void IoIoTk_mark(IoIoTk *self);
 
-IoObject *IoIoTk_init(IoIoTk *self, IoObject *locals, IoMessage *m);
 IoObject *IoIoTk_mainloop(IoIoTk *self, IoObject *locals, IoMessage *m);
 
 IoObject *IoIoTk_eval(IoIoTk *self, IoObject *locals, IoMessage *m);

@@ -35,10 +35,10 @@ IoIoTk *IoIoTk_proto(void *state) {
    DATA(self)->isProto = true;
    DATA(self)->cmdList = List_new();
    Tcl_Init(DATA(self)->interp);
+   Tk_Init(DATA(self)->interp);
    IoState_registerProtoWithId_((IoState *)state, self, protoId);
 
    IoMethodTable methodTable[] = {
-      {"init", IoIoTk_init},
       {"mainloop", IoIoTk_mainloop},
       {"eval", IoIoTk_eval},
       {"define", IoIoTk_define},
@@ -80,13 +80,9 @@ void IoIoTk_mark(IoIoTk *self) {
    }
 }
 
-IoObject *IoIoTk_init(IoIoTk *self, IoObject *locals, IoMessage *m) {
-   int r = Tk_Init(DATA(self)->interp);
-   return IOBOOL(self, r == 0);
-}
-
 IoObject *IoIoTk_mainloop(IoIoTk *self, IoObject *locals, IoMessage *m) {
    Tk_MainLoop();
+   Tk_Init(DATA(self)->interp);
    return IONIL(self);
 }
 
