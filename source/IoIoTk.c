@@ -30,12 +30,7 @@ IoIoTk *IoIoTk_proto(void *state) {
    IoObject_tag_(self, IoIoTk_newTag(state));
 
    Tcl_FindExecutable(protoId);
-   IoObject_setDataPointer_(self, calloc(1, sizeof(IoIoTkData)));
-   DATA(self)->interp = Tcl_CreateInterp();
-   DATA(self)->isProto = true;
-   DATA(self)->cmdList = List_new();
-   Tcl_Init(DATA(self)->interp);
-   Tk_Init(DATA(self)->interp);
+   IoObject_setDataPointer_(self, NULL);
    IoState_registerProtoWithId_((IoState *)state, self, protoId);
 
    IoMethodTable methodTable[] = {
@@ -56,21 +51,24 @@ IoIoTk *IoIoTk_proto(void *state) {
 IoIoTk *IoIoTk_rawClone(IoIoTk *proto) {
    IoIoTk *self = IoObject_rawClonePrimitive(proto);
    IoObject_setDataPointer_(self, calloc(1, sizeof(IoIoTkData)));
-   DATA(self)->interp = DATA(proto)->interp;
-   DATA(self)->isProto = false;
-   DATA(self)->cmdList = DATA(proto)->cmdList;
+   DATA(self)->interp = Tcl_CreateInterp();
+   Tcl_Init(DATA(self)->interp);
+   Tk_Init(DATA(self)->interp);
+   DATA(self)->cmdList = List_new();
    return self;
 }
 
 void IoIoTk_free(IoIoTk *self) {
-   if (DATA(self)->isProto && !Tcl_InterpDeleted(DATA(self)->interp)) {
+   if (DATA(self) == NULL) return;
+   if (!Tcl_InterpDeleted(DATA(self)->interp)) {
       Tcl_DeleteInterp(DATA(self)->interp);
    }
+   List_free(DATA(self)->cmdList);
    free(IoObject_dataPointer(self));
 }
 
 void IoIoTk_mark(IoIoTk *self) {
-   if (!DATA(self)->isProto) return;
+   if (DATA(self) == NULL) return;
    List *cmdList = DATA(self)->cmdList;
    int len = List_size(cmdList);
    for (int i = 0; i < len; ++i) {
@@ -82,7 +80,6 @@ void IoIoTk_mark(IoIoTk *self) {
 
 IoObject *IoIoTk_mainloop(IoIoTk *self, IoObject *locals, IoMessage *m) {
    Tk_MainLoop();
-   Tk_Init(DATA(self)->interp);
    return IONIL(self);
 }
 

@@ -12,7 +12,6 @@ typedef IoObject IoIoTk;
 
 typedef struct {
    Tcl_Interp *interp;
-   bool isProto;
    List *cmdList;
 } IoIoTkData;
 
