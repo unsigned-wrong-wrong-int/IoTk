@@ -8,12 +8,6 @@
 
 static const char *protoId = "IoTk";
 
-typedef struct {
-   IoObject *self;
-   IoSymbol *slotName;
-   List *cmdList;
-} TkCmdData;
-
 IoTag *IoIoTk_newTag(void *state) {
    IoTag *tag = IoTag_newWithName_(protoId);
    IoTag_state_(tag, state);
@@ -38,9 +32,6 @@ IoIoTk *IoIoTk_proto(void *state) {
       {"eval", IoIoTk_eval},
       {"define", IoIoTk_define},
       {"undef", IoIoTk_undef},
-      {"varAt", IoIoTk_varAt},
-      {"varAtPut", IoIoTk_varAtPut},
-      {"varRemoveAt", IoIoTk_varRemoveAt},
       {NULL, NULL}
    };
    IoObject_addMethodTable_(self, methodTable);
@@ -54,7 +45,7 @@ IoIoTk *IoIoTk_rawClone(IoIoTk *proto) {
    DATA(self)->interp = Tcl_CreateInterp();
    Tcl_Init(DATA(self)->interp);
    Tk_Init(DATA(self)->interp);
-   DATA(self)->cmdList = List_new();
+   DATA(self)->commands = PHash_new();
    return self;
 }
 
@@ -63,19 +54,16 @@ void IoIoTk_free(IoIoTk *self) {
    if (!Tcl_InterpDeleted(DATA(self)->interp)) {
       Tcl_DeleteInterp(DATA(self)->interp);
    }
-   List_free(DATA(self)->cmdList);
+   PHash_free(DATA(self)->commands);
    free(IoObject_dataPointer(self));
 }
 
 void IoIoTk_mark(IoIoTk *self) {
    if (DATA(self) == NULL) return;
-   List *cmdList = DATA(self)->cmdList;
-   int len = List_size(cmdList);
-   for (int i = 0; i < len; ++i) {
-      TkCmdData *cmd = (TkCmdData *)List_rawAt_(cmdList, i);
-      IoObject_shouldMark(cmd->self);
-      IoObject_shouldMark(cmd->slotName);
-   }
+   PHash *commands = DATA(self)->commands;
+   PHASH_FOREACH(commands, key, value,
+      IoObject_shouldMark((IoObject *)key);
+      IoObject_shouldMark((IoObject *)value));
 }
 
 IoObject *IoIoTk_mainloop(IoIoTk *self, IoObject *locals, IoMessage *m) {
@@ -96,18 +84,20 @@ IoObject *IoIoTk_eval(IoIoTk *self, IoObject *locals, IoMessage *m) {
 }
 
 int TkCmdProc(ClientData data, Tcl_Interp *interp, int argc, const char *argv[]) {
-   IoObject *self = ((TkCmdData *)data)->self;
-   IoMessage *m = IoMessage_newWithName_(IOSTATE, ((TkCmdData *)data)->slotName);
-   for (int i = 1; i < argc; ++i) {
-      IoMessage_addCachedArg_(m, IoSeq_newWithCString_(IOSTATE, argv[i]));
-   }
-   IoObject *result = IoMessage_locals_performOn_(m, self, self);
+   IoObject *self = (IoObject *)data;
    char *str = NULL;
    IoObject *ioStr = NULL;
-   if (result != IONIL(self)) {
-      ioStr = IoMessage_locals_performOn_(IOSTATE->asStringMessage, result, result);
-      if (ISSEQ(ioStr)) {
-         str = CSTRING(ioStr);
+   if (argc > 1) {
+      IoMessage *m = IoMessage_newWithName_(IOSTATE, IOSYMBOL(argv[1]));
+      for (int i = 2; i < argc; ++i) {
+         IoMessage_addCachedArg_(m, IoSeq_newWithCString_(IOSTATE, argv[i]));
+      }
+      IoObject *result = IoMessage_locals_performOn_(m, self, self);
+      if (result != IONIL(self)) {
+         ioStr = IoMessage_locals_performOn_(IOSTATE->asStringMessage, result, result);
+         if (ISSEQ(ioStr)) {
+            str = CSTRING(ioStr);
+         }
       }
    }
    Tcl_FreeResult(interp);
@@ -115,70 +105,17 @@ int TkCmdProc(ClientData data, Tcl_Interp *interp, int argc, const char *argv[])
    return TCL_OK;
 }
 
-void TkCmdDeleteProc(ClientData data) {
-   TkCmdData *cmdData = (TkCmdData *)data;
-   List_remove_(cmdData->cmdList, cmdData);
-   free(data);
-}
-
 IoObject *IoIoTk_define(IoObject *self, IoObject *locals, IoMessage *m) {
-   char *name = IoMessage_locals_cStringArgAt_(m, locals, 0);
-   TkCmdData *data = (TkCmdData *)calloc(1, sizeof(TkCmdData));
-   data->self = IoMessage_locals_valueArgAt_(m, locals, 1);
-   data->slotName = IoMessage_locals_symbolArgAt_(m, locals, 2);
-   data->cmdList = DATA(self)->cmdList;
-   List_append_(DATA(self)->cmdList, data);
-   Tcl_CreateCommand(DATA(self)->interp, name, TkCmdProc, data, TkCmdDeleteProc);
+   IoSymbol *key = IoMessage_locals_symbolArgAt_(m, locals, 0);
+   IoObject *value = IoMessage_locals_valueArgAt_(m, locals, 1);
+   PHash_at_put_(DATA(self)->commands, key, value);
+   Tcl_CreateCommand(DATA(self)->interp, CSTRING(key), TkCmdProc, value, NULL);
    return IONIL(self);
 }
 
 IoObject *IoIoTk_undef(IoObject *self, IoObject *locals, IoMessage *m) {
-   char *name = IoMessage_locals_cStringArgAt_(m, locals, 0);
-   Tcl_DeleteCommand(DATA(self)->interp, name);
+   IoSymbol *key = IoMessage_locals_symbolArgAt_(m, locals, 0);
+   Tcl_DeleteCommand(DATA(self)->interp, CSTRING(key));
+   PHash_removeKey_(DATA(self)->commands, key);
    return IONIL(self);
-}
-
-IoObject *IoIoTk_varAt(IoObject *self, IoObject *locals, IoMessage *m) {
-   char *name1 = IoMessage_locals_cStringArgAt_(m, locals, 0);
-   char *name2 = NULL;
-   if (IoMessage_argCount(m) >= 2) {
-      name2 = IoMessage_locals_cStringArgAt_(m, locals, 1);
-   }
-   const char *value = Tcl_GetVar2(DATA(self)->interp, name1, name2, 0);
-   if (value == NULL) {
-      return IONIL(self);
-   }
-   return IoSeq_newWithCString_(IOSTATE, value);
-}
-
-IoObject *IoIoTk_varAtPut(IoObject *self, IoObject *locals, IoMessage *m) {
-   char *name1 = IoMessage_locals_cStringArgAt_(m, locals, 0);
-   char *name2 = NULL;
-   IoObject *value;
-   if (IoMessage_argCount(m) >= 3) {
-      name2 = IoMessage_locals_cStringArgAt_(m, locals, 1);
-      value = IoMessage_locals_valueArgAt_(m, locals, 2);
-   } else {
-      value = IoMessage_locals_valueArgAt_(m, locals, 1);
-   }
-   const char *str = "";
-   IoObject *ioStr = NULL;
-   if (value != IONIL(self)) {
-      ioStr = IoMessage_locals_performOn_(IOSTATE->asStringMessage, value, value);
-      if (ISSEQ(ioStr)) {
-         str = CSTRING(ioStr);
-      }
-   }
-   const char *result = Tcl_SetVar2(DATA(self)->interp, name1, name2, str, 0);
-   return IOBOOL(self, result != NULL);
-}
-
-IoObject *IoIoTk_varRemoveAt(IoObject *self, IoObject *locals, IoMessage *m) {
-   char *name1 = IoMessage_locals_cStringArgAt_(m, locals, 0);
-   char *name2 = NULL;
-   if (IoMessage_argCount(m) >= 2) {
-      name2 = IoMessage_locals_cStringArgAt_(m, locals, 1);
-   }
-   int r = Tcl_UnsetVar2(DATA(self)->interp, name1, name2, 0);
-   return IOBOOL(self, r == TCL_OK);
 }

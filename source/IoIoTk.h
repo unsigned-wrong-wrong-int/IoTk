@@ -12,7 +12,7 @@ typedef IoObject IoIoTk;
 
 typedef struct {
    Tcl_Interp *interp;
-   List *cmdList;
+   PHash *commands;
 } IoIoTkData;
 
 IoIoTk *IoIoTk_proto(void *state);
@@ -26,9 +26,5 @@ IoObject *IoIoTk_eval(IoIoTk *self, IoObject *locals, IoMessage *m);
 
 IoObject *IoIoTk_define(IoObject *self, IoObject *locals, IoMessage *m);
 IoObject *IoIoTk_undef(IoObject *self, IoObject *locals, IoMessage *m);
-
-IoObject *IoIoTk_varAt(IoObject *self, IoObject *locals, IoMessage *m);
-IoObject *IoIoTk_varAtPut(IoObject *self, IoObject *locals, IoMessage *m);
-IoObject *IoIoTk_varRemoveAt(IoObject *self, IoObject *locals, IoMessage *m);
 
 #endif
