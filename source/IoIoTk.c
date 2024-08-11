@@ -76,33 +76,51 @@ IoObject *IoIoTk_eval(IoIoTk *self, IoObject *locals, IoMessage *m) {
    char *str = CSTRING(cmd);
    size_t len = IoSeq_rawSizeInBytes(cmd);
    int r = Tcl_EvalEx(DATA(self)->interp, str, len, 0);
-   if (r != TCL_OK) {
-      return IONIL(self);
-   }
    const char *result = Tcl_GetStringResult(DATA(self)->interp);
+   if (r == TCL_ERROR) {
+      IoState_error_(IOSTATE, m, "Tcl/Tk error: %s", result);
+   }
    return IoSeq_newWithCString_(IOSTATE, result);
 }
 
 int TkCmdProc(ClientData data, Tcl_Interp *interp, int argc, const char *argv[]) {
    IoObject *self = (IoObject *)data;
-   char *str = NULL;
-   IoObject *ioStr = NULL;
-   if (argc > 1) {
-      IoMessage *m = IoMessage_newWithName_(IOSTATE, IOSYMBOL(argv[1]));
-      for (int i = 2; i < argc; ++i) {
-         IoMessage_addCachedArg_(m, IoSeq_newWithCString_(IOSTATE, argv[i]));
-      }
-      IoObject *result = IoMessage_locals_performOn_(m, self, self);
-      if (result != IONIL(self)) {
-         ioStr = IoMessage_locals_performOn_(IOSTATE->asStringMessage, result, result);
-         if (ISSEQ(ioStr)) {
-            str = CSTRING(ioStr);
-         }
+   IoObject *result = NULL;
+   char *errfmt = NULL, *str = NULL;
+   if (argc <= 1) {
+      errfmt = "wrong # args: should be \"%s methodName ?arg ...?\"";
+      str = argv[0];
+      goto error;
+   }
+   IoMessage *m = IoMessage_newWithName_(IOSTATE, IOSYMBOL(argv[1]));
+   for (int i = 2; i < argc; ++i) {
+      IoMessage_addCachedArg_(m, IoSeq_newWithCString_(IOSTATE, argv[i]));
+   }
+   IoCoroutine *coro = IoCoroutine_newWithTry(IOSTATE, self, self, m);
+   IoObject *e = IoCoroutine_rawException(coro);
+   if (!ISNIL(e)) {
+      errfmt = "error in Io method: %s";
+      result = IoObject_rawGetSlot_(e, IOSYMBOL("error"));
+      str = ISSEQ(result) ? CSTRING(result) : "";
+      goto error;
+   }
+   result = IoCoroutine_rawResult(coro);
+   if (!ISNIL(result)) {
+      IoCoroutine_try(coro, result, result, IOSTATE->asStringMessage);
+      result = IoCoroutine_rawResult(coro);
+      if (ISNIL(IoCoroutine_rawException(coro)) && ISSEQ(result)) {
+         str = CSTRING(result);
       }
    }
    Tcl_FreeResult(interp);
    Tcl_SetResult(interp, str, TCL_VOLATILE);
    return TCL_OK;
+error:
+   UArray *ua = UArray_newWithFormat_(errfmt, str);
+   Tcl_FreeResult(interp);
+   Tcl_SetResult(interp, (char *)UArray_data(ua), TCL_VOLATILE);
+   UArray_free(ua);
+   return TCL_ERROR;
 }
 
 IoObject *IoIoTk_define(IoObject *self, IoObject *locals, IoMessage *m) {
