@@ -6,6 +6,10 @@
 
 #define DATA(self) ((IoIoTkData *)IoObject_dataPointer(self))
 
+#define ERROR_IF_PROTO(self, name, m) \
+   if (DATA(self) == NULL) IoState_error_(IOSTATE, m, \
+      "method '%s' called on IoTk prototype, use 'IoTk clone'", name);
+
 static const char *protoId = "IoTk";
 
 IoTag *IoIoTk_newTag(void *state) {
@@ -72,6 +76,7 @@ IoObject *IoIoTk_mainloop(IoIoTk *self, IoObject *locals, IoMessage *m) {
 }
 
 IoObject *IoIoTk_eval(IoIoTk *self, IoObject *locals, IoMessage *m) {
+   ERROR_IF_PROTO(self, "eval", m);
    IoSymbol *cmd = IoMessage_locals_symbolArgAt_(m, locals, 0);
    char *str = CSTRING(cmd);
    size_t len = IoSeq_rawSizeInBytes(cmd);
@@ -124,6 +129,7 @@ error:
 }
 
 IoObject *IoIoTk_define(IoObject *self, IoObject *locals, IoMessage *m) {
+   ERROR_IF_PROTO(self, "eval", m);
    IoSymbol *key = IoMessage_locals_symbolArgAt_(m, locals, 0);
    IoObject *value = IoMessage_locals_valueArgAt_(m, locals, 1);
    PHash_at_put_(DATA(self)->commands, key, value);
@@ -132,6 +138,7 @@ IoObject *IoIoTk_define(IoObject *self, IoObject *locals, IoMessage *m) {
 }
 
 IoObject *IoIoTk_undef(IoObject *self, IoObject *locals, IoMessage *m) {
+   ERROR_IF_PROTO(self, "eval", m);
    IoSymbol *key = IoMessage_locals_symbolArgAt_(m, locals, 0);
    Tcl_DeleteCommand(DATA(self)->interp, CSTRING(key));
    PHash_removeKey_(DATA(self)->commands, key);
