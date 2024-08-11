@@ -129,7 +129,7 @@ error:
 }
 
 IoObject *IoIoTk_define(IoObject *self, IoObject *locals, IoMessage *m) {
-   ERROR_IF_PROTO(self, "eval", m);
+   ERROR_IF_PROTO(self, "define", m);
    IoSymbol *key = IoMessage_locals_symbolArgAt_(m, locals, 0);
    IoObject *value = IoMessage_locals_valueArgAt_(m, locals, 1);
    PHash_at_put_(DATA(self)->commands, key, value);
@@ -138,7 +138,7 @@ IoObject *IoIoTk_define(IoObject *self, IoObject *locals, IoMessage *m) {
 }
 
 IoObject *IoIoTk_undef(IoObject *self, IoObject *locals, IoMessage *m) {
-   ERROR_IF_PROTO(self, "eval", m);
+   ERROR_IF_PROTO(self, "undef", m);
    IoSymbol *key = IoMessage_locals_symbolArgAt_(m, locals, 0);
    Tcl_DeleteCommand(DATA(self)->interp, CSTRING(key));
    PHash_removeKey_(DATA(self)->commands, key);
