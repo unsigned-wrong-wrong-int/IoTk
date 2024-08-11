@@ -1,11 +1,11 @@
 tk := IoTk clone
 
 btn := Object clone do(
-   cnt := 1
+   cnt := 0
 
    onclick := method(
-      writeln("clicked! " .. cnt)
       self cnt := cnt + 1
+      writeln("clicked! " .. cnt)
       nil
    )
 )
@@ -19,6 +19,6 @@ tk do(
    eval("pack .close -side right -padx 10 -pady 10")
 )
 
-writeln("start")
+writeln("start " .. btn cnt)
 tk mainloop
-writeln("end")
+writeln("end " .. btn cnt)
