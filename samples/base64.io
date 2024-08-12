@@ -7,8 +7,6 @@ base64 := Object clone do(
       for(i, 1, len - 2, 3,
          s appendSeq(tk eval("lindex ${io_base64.l} " .. i))
       )
-      writeln(s encoding)
-      writeln(s)
       t := s asBase64
       tk eval("#{dest} delete 1.0 end; #{dest} insert end \"#{t}\"" interpolate)
       tk eval("unset io_base64.l")
